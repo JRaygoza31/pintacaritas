@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template_string, request, redirect, url_for
 from extensiones import db
-from models import Evento
+from models import Evento, Servicio, Municipio
 from datetime import datetime
 
 formularios_bp = Blueprint('formularios', __name__)
@@ -96,10 +96,20 @@ def seleccionar_formulario():
 
 
 # ---------------------------
-# PANTALLA DE REGISTRO EXITOSO
+# PANTALLA DE REGISTRO EXITOSO — AHORA CON RESUMEN
 # ---------------------------
 @formularios_bp.route('/registro-exitoso')
 def registro_exitoso():
+
+    evento_id = request.args.get("evento_id")
+
+    if not evento_id:
+        return "Error: no se recibió ID del evento."
+
+    evento = Evento.query.get(evento_id)
+    if not evento:
+        return "Evento no encontrado."
+
     return render_template_string("""
 <!DOCTYPE html>
 <html lang="es">
@@ -109,63 +119,134 @@ def registro_exitoso():
   <title>Registro Exitoso</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 
-  <script>
-    // Redirección automática después de 7 segundos
-    setTimeout(() => {
-      window.location.href = "{{ url_for('formularios.seleccionar_formulario') }}";
-    }, 7000);
-  </script>
-
   <style>
     body {
-      background: linear-gradient(135deg, #1e3a8a, #3b82f6, #9333ea);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-family: 'Inter', sans-serif;
-    }
+            background: linear-gradient(135deg, #3b82f6, #9333ea, #ec4899);
+            background-size: 200% 200%;
+            animation: fondomove 12s ease infinite;
+        }
+        @keyframes fondomove {
+            0% { background-position: 0% 0%; }
+            50% { background-position: 100% 100%; }
+            100% { background-position: 0% 0%; }
+        }
+
+
   </style>
+  
+  
 </head>
 
 <body>
-  <div class="bg-white bg-opacity-10 p-10 rounded-2xl shadow-lg text-center max-w-lg w-full animate-fadeIn">
+  <div class="bg-white bg-opacity-10 p-10 rounded-2xl shadow-lg text-center max-w-xl w-full">
+
     <div class="text-6xl mb-4">🎉</div>
     <h1 class="text-3xl font-bold mb-3">¡Evento registrado con éxito!</h1>
-    <p class="text-lg mb-6 opacity-90">Gracias por registrar el evento. Puedes añadir otro o regresar al menú principal.</p>
 
-    <div class="flex flex-col sm:flex-row gap-4 justify-center">
+    <h2 class="text-xl font-semibold mb-4">Resumen del evento:</h2>
+
+    <div class="bg-white bg-opacity-20 p-4 rounded-lg text-left space-y-2">
+      <p><strong>Cliente:</strong> {{ evento.nombre_cliente }}</p>
+      <p><strong>WhatsApp:</strong> {{ evento.whatsapp }}</p>
+      <p><strong>Fecha:</strong> {{ evento.fecha_evento.strftime('%d/%m/%Y') }}</p>
+      <p><strong>Horario:</strong> {{ evento.hora_inicio }} - {{ evento.hora_termino }}</p>
+      <p><strong>Horas:</strong> {{ evento.cantidad_horas }}</p>
+      <p><strong>Servicios:</strong> {{ evento.servicios_interes }}</p>
+      <p><strong>Municipio:</strong> {{ evento.municipio }}</p>
+      <p><strong>Salón:</strong> {{ evento.nombre_salon or 'N/A' }}</p>
+      <p><strong>Dirección:</strong> {{ evento.direccion or 'N/A' }}</p>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-4 justify-center mt-6">
+
       <a href="{{ url_for('formularios.seleccionar_formulario') }}"
          class="bg-blue-500 hover:bg-blue-600 transition text-white font-semibold px-6 py-3 rounded-lg">
-         🏠 Volver al menú
+          🏠 Volver al menú
       </a>
 
       <a href="{{ url_for('formularios.formulario_pintacaritas') }}"
          class="bg-pink-500 hover:bg-pink-600 transition text-white font-semibold px-6 py-3 rounded-lg">
-         ➕ Registrar otro evento
+          ➕ Registrar otro evento
       </a>
+
+      <!-- 📲 BOTÓN WHATSAPP SIN %0A -->
+      <button id="whatsappBtn"
+              class="bg-green-500 hover:bg-green-600 transition text-white font-semibold px-6 py-3 rounded-lg">
+          📲 Compartir por WhatsApp
+      </button>
+
     </div>
 
-    <p class="text-sm text-purple-200 mt-6">Serás redirigido automáticamente en 7 segundos...</p>
   </div>
+
+<script>
+(function(){
+  const nombreCliente = "{{ evento.nombre_cliente|e }}";
+  let phoneRaw = "{{ evento.whatsapp|e }}";
+  const fecha = "{{ evento.fecha_evento.strftime('%d/%m/%Y') }}";
+  const horaInicio = "{{ evento.hora_inicio|e }}";
+  const horaTermino = "{{ evento.hora_termino|e }}";
+  const horas = "{{ evento.cantidad_horas|e }}";
+  const servicios = "{{ evento.servicios_interes|e }}";
+  const municipio = "{{ evento.municipio|e }}";
+  const salon = "{{ (evento.nombre_salon or 'N/A')|e }}";
+  const direccion = "{{ (evento.direccion or 'N/A')|e }}";
+
+  function normalizePhone(p) {
+    let digits = p.replace(/\\D/g, '');
+    if (!digits) return '';
+    if (digits.length === 10) return '52' + digits;
+    return digits;
+  }
+
+  document.getElementById('whatsappBtn').addEventListener('click', function(){
+    const phone = normalizePhone(phoneRaw);
+    if (!phone) {
+      alert("El número de WhatsApp no es válido.");
+      return;
+    }
+
+    const plural = parseFloat(horas) > 1 ? "s" : "";
+    const duracion = horas ? `${horas} hora${plural}` : "N/A";
+
+    const mensaje = [
+      `✨ ¡Hola ${nombreCliente}! ✨`,
+      ``,
+      `Aquí tienes el resumen de tu evento:`,
+      ``,
+      `📅 Fecha: ${fecha}`,
+      `⏰ Horario: ${horaInicio} - ${horaTermino}`,
+      `⏳ Duración: ${duracion}`,
+      `🎨 Servicios: ${servicios}`,
+      `📍 Municipio: ${municipio}`,
+      `🏨 Salón: ${salon}`,
+      `📌 Dirección: ${direccion}`,
+      ``,
+      `¡Gracias por registrar tu evento con nosotros! 🎉`
+    ].join("\\n");
+
+    const url = "https://api.whatsapp.com/send?phone=" + phone + "&text=" + encodeURIComponent(mensaje);
+    window.open(url, "_blank");
+  });
+})();
+</script>
+
 </body>
 </html>
-""")
+""", evento=evento)
+
 
 
 # ---------------------------
 # FORMULARIO BASE
 # ---------------------------
 def generar_formulario_html(tipo, servicios):
-    horas = [
-        "10:00AM", "10:30AM", "11:00AM", "11:30AM", "12:00PM", "12:30PM",
-        "01:00PM", "01:30PM", "02:00PM", "02:30PM", "03:00PM", "03:30PM",
-        "04:00PM", "04:30PM", "05:00PM", "05:30PM", "06:00PM", "06:30PM",
-        "07:00PM", "07:30PM", "08:00PM"
-    ]
+    horas = []
+    for h in range(24):
+        for m in ["00", "30"]:
+            horas.append(f"{h:02d}:{m}")
 
-    municipios = ["MONTERREY", "SPGG", "GUADALUPE", "SAN NICOLAS", "APODACA", "SANTIAGO"]
+    municipios = [m.nombre for m in Municipio.query.order_by(Municipio.nombre).all()]
 
     return render_template_string("""
 <!DOCTYPE html>
@@ -202,7 +283,15 @@ def generar_formulario_html(tipo, servicios):
 
       <form method="POST" class="space-y-4">
         <input name="nombre_cliente" placeholder="Nombre del cliente" required class="w-full p-3 rounded-lg text-black focus:outline-none">
-        <input name="whatsapp" placeholder="WhatsApp" required class="w-full p-3 rounded-lg text-black focus:outline-none">
+        <input
+            name="whatsapp"
+            placeholder="WhatsApp"
+            required
+            class="w-full p-3 rounded-lg text-black focus:outline-none"
+            pattern="\\d{10}"
+            maxlength="10"
+            inputmode="numeric"
+        />
         <input name="fecha_evento" type="date" required class="w-full p-3 rounded-lg text-black focus:outline-none">
 
         <div class="flex gap-4">
@@ -262,16 +351,7 @@ def generar_formulario_html(tipo, servicios):
 # ---------------------------
 @formularios_bp.route('/formulario-pintacaritas', methods=['GET', 'POST'])
 def formulario_pintacaritas():
-    servicios_pinta = [
-        "Pintacaritas Básico", "Pintacaritas Profesional", "Talle de Caritas de Pasto",
-        "Taller de Decoración de Espejos", "Taller de Slime", "Taller de Yesitos",
-        "Taller de Pulseritas", "Taller de Globos Sensoriales", "Taller de Glitter Tatto",
-        "Taller Decoración de Lentes", "Pintauñitas", "Caballetes", "Perfume Bar",
-        "Glitter Bar Kids", "Charola de Glitter", "Carrito de Glitter",
-        "Promo especial 2 horas Pintacaritas Pro y Taller",
-        "Promo especial 2 horas Glitter Bar Kids y Taller",
-        "Promo especial 1 hora Pintacaritas Pro y Taller"
-    ]
+    servicios_pinta = [s.nombre for s in Servicio.query.order_by(Servicio.nombre).all()]
 
     if request.method == 'POST':
         evento = Evento(
@@ -289,7 +369,7 @@ def formulario_pintacaritas():
         )
         db.session.add(evento)
         db.session.commit()
-        return redirect(url_for('formularios.registro_exitoso'))
+        return redirect(url_for('formularios.registro_exitoso', evento_id=evento.id))
 
     return generar_formulario_html("Formulario Pintacaritas", servicios_pinta)
 
@@ -299,10 +379,7 @@ def formulario_pintacaritas():
 # ---------------------------
 @formularios_bp.route('/formulario-glitter', methods=['GET', 'POST'])
 def formulario_glitter():
-    servicios_glitter = [
-        "Charola Neon de Glitter", "Carrito de Glitter", "Glitter Bar",
-        "Glitter Party", "Glitter Bar Deluxe"
-    ]
+    servicios_glitter = [s.nombre for s in Servicio.query.filter_by(tipo="Glitter").order_by(Servicio.nombre).all()]
 
     if request.method == 'POST':
         evento = Evento(
@@ -320,6 +397,6 @@ def formulario_glitter():
         )
         db.session.add(evento)
         db.session.commit()
-        return redirect(url_for('formularios.registro_exitoso'))
+        return redirect(url_for('formularios.registro_exitoso', evento_id=evento.id))
 
     return generar_formulario_html("Formulario Glitter", servicios_glitter)

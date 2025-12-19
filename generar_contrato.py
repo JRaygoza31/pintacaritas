@@ -9,7 +9,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 import fitz  # PyMuPDF
 import requests
-import os
+import unicodedata
 
 generar_contrato_bp = Blueprint("generar_contrato", __name__)
 
@@ -22,66 +22,55 @@ MESES_ES = {
     "September": "SEPTIEMBRE","October": "OCTUBRE","November": "NOVIEMBRE","December": "DICIEMBRE"
 }
 
-# ============================================================
-# FUNCIONES DE GENERACIÓN DE CONTRATOS
-# ============================================================
+# -----------------------------
+# Función para quitar acentos
+# -----------------------------
+def quitar_acentos(texto):
+    return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
+# ============================================================
+# Generación de contratos
+# ============================================================
 def generar_contrato_pintacaritas(evento):
-    """Genera el contrato tipo PINTACARITAS"""
     packet = BytesIO()
     can = canvas.Canvas(packet, pagesize=letter)
 
-    # FOLIO
     can.setFont("Helvetica-Bold", 22)
     can.setFillColor(colors.red)
     can.drawString(436, 623, str(evento.folio_manual or ""))
 
-    # FECHA
     mes = MESES_ES[evento.fecha_evento.strftime("%B")]
     fecha_larga = f"{evento.fecha_evento.day} DE {mes} DE {evento.fecha_evento.year}"
     can.setFont("Helvetica-Bold", 12)
     can.setFillColor(colors.blue)
     can.drawString(240, 543, fecha_larga)
 
-    # HORARIOS
     can.drawString(240, 498, str(evento.hora_inicio or "").upper())
     can.drawString(295, 498, ("- " + str(evento.hora_termino or "")).upper())
     can.drawString(370, 498, ("(" + str(evento.cantidad_horas or "") + ")").upper())
 
-    # SALÓN
     can.drawString(240, 452, ("(" + str(evento.nombre_salon or "") + ")").upper())
+    can.drawString(240, 418, f"{(evento.municipio or '').upper()} - {(evento.direccion or '').upper()}")
 
-    # DIRECCIÓN
-    texto_completo = f"{(evento.municipio or '').upper()} - {(evento.direccion or '').upper()}"
-    can.drawString(240, 418, texto_completo)
-
-    # SERVICIOS
     can.setFont("Helvetica-Bold", 10)
-    texto = str(evento.servicios_interes or "").upper()
-    lineas = texto.replace(',', '\n').split('\n')
-    y_inicial = 386
+    lineas = str(evento.servicios_interes or "").replace(',', '\n').split('\n')
+    y = 386
     for i, linea in enumerate(lineas):
-        can.drawString(240, y_inicial - i*10, linea.strip())
+        can.drawString(240, y - i*10, linea.strip())
+    can.drawString(390, 362, "(INCLUYE)")
 
-    can.drawString(390, 362, "(INCLUYE)")  # Personalízalo si tienes campo
-
-    # CLIENTE
     can.setFont("Helvetica-Bold", 12)
     can.drawString(240, 320, str(evento.nombre_cliente or "").upper())
     can.drawString(240, 287, str(evento.whatsapp or "").upper())
 
-    # MONTOS
-    can.setFont("Helvetica-Bold", 12)
     can.setFillColor(colors.black)
     can.drawString(153, 215, str(evento.total or ""))
     can.drawString(278, 215, str(evento.anticipo or ""))
     can.drawString(403, 215, str(evento.restan or ""))
     can.save()
 
-    # Combinar con plantilla
     packet.seek(0)
     overlay = PdfReader(packet)
-
     url = "https://drive.google.com/uc?export=download&id=1Y-WP09PuwrkBI9qWLKmiS1EsKjesu_aa"
     plantilla = PdfReader(BytesIO(requests.get(url).content))
 
@@ -95,52 +84,37 @@ def generar_contrato_pintacaritas(evento):
     output.seek(0)
     return output
 
-
 def generar_contrato_glitter(evento):
-    """Genera el contrato tipo GLITTER"""
     packet = BytesIO()
     can = canvas.Canvas(packet, pagesize=letter)
 
-    # FOLIO
     can.setFont("Helvetica-Bold", 22)
     can.setFillColor(colors.black)
     can.drawString(430, 550, str(evento.folio_manual or ""))
 
-    # FECHA
     mes = MESES_ES[evento.fecha_evento.strftime("%B")]
     fecha_larga = f"{evento.fecha_evento.day} DE {mes} DE {evento.fecha_evento.year}"
     can.setFont("Helvetica-Bold", 12)
     can.drawString(230, 492, fecha_larga)
 
-    # HORARIOS
     texto_horario = f"{str(evento.hora_inicio or '').upper()} - {str(evento.hora_termino or '').upper()} ({str(evento.cantidad_horas or '')})"
     can.drawString(230, 445, texto_horario)
-
-    # SALÓN Y DIRECCIÓN
     can.drawString(230, 390, ("(" + str(evento.nombre_salon or "") + ")").upper())
-    texto_completo = f"{(evento.municipio or '').upper()} - {(evento.direccion or '').upper()}"
-    can.drawString(230, 372, texto_completo)
+    can.drawString(230, 372, f"{(evento.municipio or '').upper()} - {(evento.direccion or '').upper()}")
 
-    # SERVICIOS
-    texto = str(evento.servicios_interes or "").upper()
-    lineas = texto.replace(',', '\n').split('\n')
-    y_inicial = 325
+    lineas = str(evento.servicios_interes or "").replace(',', '\n').split('\n')
+    y = 325
     for i, linea in enumerate(lineas):
-        can.drawString(230, y_inicial - i*10, linea.strip())
+        can.drawString(230, y - i*10, linea.strip())
     can.drawString(390, 312, "(INCLUYE)")
 
-    # CLIENTE
-    can.setFont("Helvetica-Bold", 12)
     can.drawString(230, 267, str(evento.nombre_cliente or "").upper())
     can.drawString(230, 247, str(evento.whatsapp or "").upper())
-
-    # MONTOS
     can.drawString(123, 163, str(evento.total or ""))
     can.drawString(248, 163, str(evento.anticipo or ""))
     can.drawString(373, 163, str(evento.restan or ""))
     can.save()
 
-    # Combinar con plantilla
     packet.seek(0)
     overlay = PdfReader(packet)
     url = "https://drive.google.com/uc?export=download&id=17njLY9vWvS2Vhv7Q0l1aXbcY94l5p_Sh"
@@ -156,13 +130,10 @@ def generar_contrato_glitter(evento):
     output.seek(0)
     return output
 
-
 # ============================================================
-# FUNCIONES AUXILIARES
+# Convertir PDF a PNG
 # ============================================================
-
 def convertir_pdf_a_png(pdf_bytes, nombre_archivo):
-    """Convierte un PDF (en memoria) a imagen PNG usando PyMuPDF (sin Poppler)."""
     pdf_bytes.seek(0)
     pdf_document = fitz.open(stream=pdf_bytes.read(), filetype="pdf")
     page = pdf_document.load_page(0)
@@ -172,54 +143,53 @@ def convertir_pdf_a_png(pdf_bytes, nombre_archivo):
     nombre_png = nombre_archivo.replace(".pdf", ".png")
     return png_bytes, nombre_png
 
-
 # ============================================================
-# VISTA WEB (HTML CON TAILWIND)
+# HTML del formulario
 # ============================================================
-
 html_formulario = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Generar Contrato</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+
   <style>
     body {
-      background: linear-gradient(135deg, #3b82f6, #9333ea);
       min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
       font-family: 'Inter', sans-serif;
+      background: linear-gradient(45deg, #3b82f6, #9333ea, #ec4899, #22c55e);
+      background-size: 400% 400%;
+      animation: gradientBG 10s ease infinite;
     }
-    .card {
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-    .card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-    }
-    #preview-container {
-      display: none;
-      margin-top: 2rem;
-    }
-    #preview {
-      max-width: 100%;
-      border-radius: 0.75rem;
-      box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+    @keyframes gradientBG {
+      0% {background-position: 0% 50%;}
+      50% {background-position: 100% 50%;}
+      100% {background-position: 0% 50%;}
     }
   </style>
+
 </head>
 <body>
+
+<nav class="w-full bg-white bg-opacity-20 backdrop-blur-lg shadow-lg py-4 px-6 flex justify-between items-center">
+  <h1 class="text-white text-xl font-semibold drop-shadow">Sistema de Contratos</h1>
+  <a href="{{ url_for('home') }}" 
+     class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg shadow">
+     ⬅️ Inicio
+  </a>
+</nav>
+
+<div class="flex justify-center items-center mt-10">
   <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-lg card">
-    <h1 class="text-3xl font-bold text-center text-indigo-600 mb-6">📝 Generar Contrato</h1>
-    
+    <h2 class="text-3xl font-bold text-center text-indigo-600 mb-6">📝 Generar Contrato</h2>
+
     <form id="contrato-form" class="space-y-4">
       <div>
         <label class="font-semibold text-gray-700">Folio Manual:</label>
         <input type="text" name="folio_manual" required class="w-full mt-2 p-2 border rounded-lg focus:ring-2 focus:ring-indigo-400">
       </div>
+
       <div>
         <label class="font-semibold text-gray-700">Tipo de Evento:</label>
         <select name="tipo_evento" required class="w-full mt-2 p-2 border rounded-lg focus:ring-2 focus:ring-indigo-400">
@@ -228,6 +198,7 @@ html_formulario = """
           <option value="glitter">✨ Glitter</option>
         </select>
       </div>
+
       <div>
         <label class="font-semibold text-gray-700">Formato:</label>
         <select name="formato" required class="w-full mt-2 p-2 border rounded-lg focus:ring-2 focus:ring-indigo-400">
@@ -235,75 +206,105 @@ html_formulario = """
           <option value="pdf">📄 PDF</option>
         </select>
       </div>
-      <button type="submit" class="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition">Generar Contrato</button>
+
+      <button type="submit" class="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition shadow-md">
+        Generar Contrato
+      </button>
     </form>
 
     {% if mensaje %}
       <p class="mt-4 text-center text-red-600 font-semibold">{{ mensaje }}</p>
     {% endif %}
 
-    <div id="preview-container" class="text-center">
+    <div id="preview-container" class="text-center hidden">
       <h2 class="text-lg font-semibold text-gray-700 mb-3">Vista Previa:</h2>
-      <img id="preview" alt="Vista previa del contrato">
+      <img id="preview" class="max-w-full rounded-lg shadow-lg">
+
       <div class="mt-4">
-        <a id="download-btn" href="#" download class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg hidden">📥 Descargar</a>
+        <a id="download-btn" href="#" download class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg hidden">
+          📥 Descargar
+        </a>
       </div>
     </div>
   </div>
+</div>
 
-  <script>
-    document.getElementById('contrato-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const form = e.target;
-      const formData = new FormData(form);
-      const formato = formData.get('formato');
-      const previewContainer = document.getElementById('preview-container');
-      const preview = document.getElementById('preview');
-      const downloadBtn = document.getElementById('download-btn');
+<script>
+document.getElementById('contrato-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const formData = new FormData(form);
+  const formato = formData.get('formato');
+  const previewContainer = document.getElementById('preview-container');
+  const preview = document.getElementById('preview');
+  const downloadBtn = document.getElementById('download-btn');
 
-      // Ocultar vista previa al comenzar
-      previewContainer.style.display = 'none';
-      downloadBtn.classList.add('hidden');
+  previewContainer.classList.add('hidden');
+  downloadBtn.classList.add('hidden');
 
-      const response = await fetch('/generar-contrato', {
-        method: 'POST',
-        body: formData
-      });
+  const response = await fetch('/generar-contrato', {
+    method: 'POST',
+    body: formData
+  });
 
-      if (!response.ok) {
-        alert('⚠️ Ocurrió un error al generar el contrato.');
-        return;
-      }
+  if (!response.ok) {
+    alert('⚠️ Error al generar el contrato.');
+    return;
+  }
 
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
 
-      if (formato === 'png') {
-        // Mostrar vista previa de imagen
-        preview.src = url;
-        previewContainer.style.display = 'block';
-        downloadBtn.href = url;
-        downloadBtn.download = 'contrato.png';
-        downloadBtn.classList.remove('hidden');
-      } else {
-        // Descargar directamente PDF
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'contrato.pdf';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }
-    });
-  </script>
+ if (formato === 'png') {
+
+    // Leer nombre desde los headers
+    const disposition = response.headers.get("Content-Disposition");
+    let filename = "contrato.png";
+
+    if (disposition && disposition.includes("filename=")) {
+      filename = disposition.split("filename=")[1].replace(/"/g, "");
+    }
+
+    // Mostrar vista previa
+    preview.src = url;
+    previewContainer.classList.remove('hidden');
+
+    // Botón de descarga con nombre correcto
+    downloadBtn.href = url;
+    downloadBtn.download = filename;
+    downloadBtn.classList.remove('hidden');
+
+  } 
+  // ==========================
+  // PDF
+  // ==========================
+  else {
+
+    const disposition = response.headers.get("Content-Disposition");
+    let filename = "contrato.pdf";
+
+    if (disposition && disposition.includes("filename=")) {
+      filename = disposition.split("filename=")[1].replace(/"/g, "");
+    }
+
+    // Forzar descarga con el nombre real
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+});
+</script>
+
 </body>
 </html>
 """
 
 # ============================================================
-# RUTA PRINCIPAL DEL BLUEPRINT
+# Ruta principal
 # ============================================================
-
 @generar_contrato_bp.route("/generar-contrato", methods=["GET", "POST"])
 def generar_contrato():
     mensaje = None
@@ -317,20 +318,21 @@ def generar_contrato():
             mensaje = f"❌ No se encontró el folio {folio_manual}"
         else:
             try:
-                if tipo_evento == "pintacaritas":
-                    output_pdf = generar_contrato_pintacaritas(evento)
-                else:
-                    output_pdf = generar_contrato_glitter(evento)
+                # Generar contrato según tipo
+                output_pdf = generar_contrato_pintacaritas(evento) if tipo_evento=="pintacaritas" else generar_contrato_glitter(evento)
 
-                nombre_archivo = f"{folio_manual}_{tipo_evento.upper()}_CONTRATO.pdf"
+                # Nombre dinámico
+                dia = evento.fecha_evento.day
+                mes_es = MESES_ES[evento.fecha_evento.strftime("%B")]
+                nombre_cliente = quitar_acentos((evento.nombre_cliente or "").replace(" ", "_").upper())
+                nombre_final = f"{folio_manual}_{dia}_{mes_es}_{nombre_cliente}.pdf"
 
+                # Enviar archivo
                 if formato == "pdf":
-                    return send_file(output_pdf, as_attachment=True, download_name=nombre_archivo, mimetype="application/pdf")
-
-                elif formato == "png":
-                    png_bytes, png_name = convertir_pdf_a_png(output_pdf, nombre_archivo)
-                    return send_file(png_bytes, as_attachment=True, download_name=png_name, mimetype="image/png")
-
+                    return send_file(output_pdf, as_attachment=True, download_name=nombre_final, mimetype="application/pdf")
+                else:
+                    png_bytes, nombre_png = convertir_pdf_a_png(output_pdf, nombre_final)
+                    return send_file(png_bytes, as_attachment=True, download_name=nombre_png, mimetype="image/png")
             except Exception as e:
                 mensaje = f"⚠️ Error: {str(e)}"
 
